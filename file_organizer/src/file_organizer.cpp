@@ -230,23 +230,54 @@ bool move_file(const fs::path& source_file, const fs::path& target_file, bool dr
         return true;
     }
 
+    fs::path final_target = target_file;
+
+    // Check if the target file already exists
+    if (fs::exists(target_file)) {
+        // Compare contents
+        std::ifstream source_stream(source_file, std::ios::binary);
+        std::ifstream target_stream(target_file, std::ios::binary);
+
+        std::ostringstream source_contents;
+        std::ostringstream target_contents;
+
+        source_contents << source_stream.rdbuf();
+        target_contents << target_stream.rdbuf();
+
+        if (source_contents.str() != target_contents.str()) {
+            // File contents differ, create a unique name
+            int counter = 1;
+            do {
+                final_target = target_file.parent_path() /
+                               (target_file.stem().string() + "_" + std::to_string(counter) + target_file.extension().string());
+                counter++;
+            } while (fs::exists(final_target));
+        } else {
+            if (verbose) {
+                std::cout << "Skipping: \"" << source_file << "\" as it matches the existing file.\n";
+            }
+            return true; // Skip moving as the contents are identical
+        }
+    }
+
     if (dry_run) {
-        std::cout << "[Dry-Run] Would move: \"" << source_file << "\" -> \"" << target_file << "\"\n";
+        std::cout << "[Dry-Run] Would move: \"" << source_file << "\" -> \"" << final_target << "\"\n";
         return true;
     }
 
     try {
-        fs::rename(source_file, target_file);
+        fs::rename(source_file, final_target);
         if (verbose) {
-            std::cout << "Moved: \"" << source_file << "\" -> \"" << target_file << "\"\n";
+            std::cout << "Moved: \"" << source_file << "\" -> \"" << final_target << "\"\n";
         }
         return true;
     } catch (const fs::filesystem_error& e) {
-        std::cerr << "Error: Unable to move \"" << source_file << "\" -> \"" << target_file 
+        std::cerr << "Error: Unable to move \"" << source_file << "\" -> \"" << final_target 
                   << "\": " << e.what() << "\n";
         return false;
     }
 }
+
 
 // Function to collect all files first
 std::vector<fs::path> collect_all_files(const fs::path& src_directory, bool verbose) {
